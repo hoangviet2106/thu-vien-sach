@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  STUDENT
+  LIBRARIAN
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+enum LoanStatus {
+  ACTIVE
+  OVERDUE
+  RETURNED
+  LOST
+  RENEWED
+}
+
+model User {
+  id           String         @id @default(uuid())
+  email        String         @unique
+  passwordHash String
+  role         UserRole
+  fullName     String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  deletedAt    DateTime?
+
+  studentProfile StudentProfile?
+  audits         AuditLog[]      @relation("AuditActor")
+  recordedPayments FeePayment[]  @relation("PaymentRecorder")
+
+  @@index([deletedAt])
+}
+
+model StudentProfile {
+  id                     String        @id @default(uuid())
+  userId                 String        @unique
+  studentCode            String        @unique
+  accountStatus          AccountStatus @default(ACTIVE)
+  totalOutstandingFeeVnd Int           @default(0)
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  deletedAt              DateTime?
+
+  user      User         @relation(fields: [userId], references: [id])
+  loans     Loan[]
+  payments  FeePayment[]
+
+  @@index([accountStatus])
+  @@index([deletedAt])
+}
+
+model Book {
+  id          String   @id @default(uuid())
+  isbn        String   @unique
+  title       String
+  author      String
+  category    String?
+  publishYear Int?
+  totalCopies Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  loans Loan[]
+
+  @@index([title])
+  @@index([author])
+  @@index([deletedAt])
+}
+
+model Loan {
+  id              String     @id @default(uuid())
+  studentId       String
+  bookId          String
+  borrowedAt      DateTime
+  dueAt           DateTime
+  returnedAt      DateTime?
+  status          LoanStatus @default(ACTIVE)
+  renewalCount    Int        @default(0)
+  renewedFromLoanId String?
+  finalLateFeeVnd Int        @default(0)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  deletedAt       DateTime?
+
+  student StudentProfile @relation(fields: [studentId], references: [id])
+  book    Book           @relation(fields: [bookId], references: [id])
+
+  @@index([studentId, status])
+  @@index([bookId, status])
+  @@index([dueAt, status])
+  @@index([deletedAt])
+}
+
+model FeePayment {
+  id               String   @id @default(uuid())
+  studentId        String
+  recordedByUserId String
+  amountVnd        Int
+  note             String?
+  paidAt           DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  deletedAt        DateTime?
+
+  student    StudentProfile @relation(fields: [studentId], references: [id])
+  recordedBy User           @relation("PaymentRecorder", fields: [recordedByUserId], references: [id])
+
+  @@index([deletedAt])
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  actorUserId   String?
+  action        String
+  entityType    String
+  entityId      String
+  changeSummary Json
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}

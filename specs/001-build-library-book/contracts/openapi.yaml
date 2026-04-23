@@ -1,0 +1,395 @@
+openapi: 3.1.0
+info:
+  title: University Library API
+  version: 1.0.0
+servers:
+  - url: /api/v1
+paths:
+  /auth/login:
+    post:
+      summary: Login and get access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, token_type, expires_in]
+                properties:
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                    example: Bearer
+                  expires_in:
+                    type: integer
+                    example: 900
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /books:
+    get:
+      summary: Search and list books
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search keyword for title/author/isbn
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Book list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, page, limit, total]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BookSummary'
+                  page:
+                    type: integer
+                  limit:
+                    type: integer
+                  total:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+    post:
+      summary: Create a book (librarian/admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookDetail'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /books/{bookId}:
+    patch:
+      summary: Update book metadata or copies
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: bookId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBookRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookDetail'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+    delete:
+      summary: Soft-delete a book with no active loans
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: bookId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /loans:
+    post:
+      summary: Borrow a book
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bookId]
+              properties:
+                bookId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Loan created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanDetail'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /loans/{loanId}/return:
+    post:
+      summary: Return a borrowed book
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: loanId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Return processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanDetail'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /loans/{loanId}/renew:
+    post:
+      summary: Renew a loan one time if eligible
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: loanId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Renewed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanDetail'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /students/me/loans:
+    get:
+      summary: List current student loans
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Student loan list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LoanDetail'
+        '401':
+          $ref: '#/components/responses/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    ErrorResponse:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+          example: BOOK_NOT_AVAILABLE
+        message:
+          type: string
+          example: Requested book has no available copies.
+
+    BookSummary:
+      type: object
+      required: [id, isbn, title, author, totalCopies, availableCopies]
+      properties:
+        id:
+          type: string
+          format: uuid
+        isbn:
+          type: string
+        title:
+          type: string
+        author:
+          type: string
+        totalCopies:
+          type: integer
+        availableCopies:
+          type: integer
+
+    BookDetail:
+      allOf:
+        - $ref: '#/components/schemas/BookSummary'
+        - type: object
+          properties:
+            category:
+              type: string
+              nullable: true
+            publishYear:
+              type: integer
+              nullable: true
+
+    CreateBookRequest:
+      type: object
+      required: [isbn, title, author, totalCopies]
+      properties:
+        isbn:
+          type: string
+        title:
+          type: string
+        author:
+          type: string
+        category:
+          type: string
+        publishYear:
+          type: integer
+        totalCopies:
+          type: integer
+          minimum: 1
+
+    UpdateBookRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        author:
+          type: string
+        category:
+          type: string
+        publishYear:
+          type: integer
+        totalCopies:
+          type: integer
+          minimum: 1
+
+    LoanDetail:
+      type: object
+      required: [id, studentId, bookId, status, borrowedAt, dueAt, finalLateFeeVnd]
+      properties:
+        id:
+          type: string
+          format: uuid
+        studentId:
+          type: string
+          format: uuid
+        bookId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [ACTIVE, OVERDUE, RETURNED, LOST, RENEWED]
+        borrowedAt:
+          type: string
+          format: date
+        dueAt:
+          type: string
+          format: date
+        returnedAt:
+          type: string
+          format: date
+          nullable: true
+        renewalCount:
+          type: integer
+        finalLateFeeVnd:
+          type: integer
